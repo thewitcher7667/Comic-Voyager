@@ -24,7 +24,7 @@ public class Movment : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-        layerMask = LayerMask.GetMask("LayerGround");
+        layerMask = LayerMask.GetMask("Ground");
         isGrounded = Physics.CheckSphere(sphereGround.position,0.5f, layerMask);
     }
 

@@ -2,17 +2,21 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class PlayerMovementEdit : MonoBehaviour {
+public class PlayerMovement : MonoBehaviour {
 
 	public CharacterController Controller;
 	public Transform GroundCheck;
+	public Camera cam;
 
-	public Vector3 move;
+	Vector3 move;
 
 	Vector3 Velocity;
 
+
 	public LayerMask groundMask;
 
+	float turnSmotthTime = 0.1f;
+	float turnSmothVelocity;
 	float x;
 	float z;
 	float MovingSpeed=20f;
@@ -24,7 +28,7 @@ public class PlayerMovementEdit : MonoBehaviour {
 	public float mass = 1f;
 	public float max_safe_falling_speed = -60f;
 	public float max_falling_speed = -1000f;
-	public float groundDistance = 0.4f;
+	public float groundDistance = 0.5f;
 	public float jumpheight = 3f;
 	public float accrate;
 	float accrate_carrier;
@@ -56,6 +60,26 @@ public class PlayerMovementEdit : MonoBehaviour {
 	}
 	void Update()
 	{
+		x = Input.GetAxis("Horizontal");
+		z = Input.GetAxis("Vertical");
+		move = transform.right * x + transform.forward * z;
+
+		//Camera
+		Vector3 direction = new Vector3(x, 0f, z);
+		if (direction.magnitude >= 0.1f)
+		{
+			float taretAngle = Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg + cam.transform.eulerAngles.y;
+			float angle = Mathf.SmoothDampAngle(transform.eulerAngles.y, taretAngle, ref turnSmothVelocity, turnSmotthTime);
+			transform.rotation = Quaternion.Euler(0f, angle, 0f);
+
+			Vector3 movdir = Quaternion.Euler(0f, taretAngle, 0f) * Vector3.forward;
+			Controller.Move(movdir.normalized * speed * Time.deltaTime);
+
+		}
+        else
+        {
+			Controller.Move(move * MovingSpeed * Time.deltaTime);
+		}
 
 
 
@@ -63,11 +87,7 @@ public class PlayerMovementEdit : MonoBehaviour {
 		CheckMotion();
 		MotionState();
 
-		x = Input.GetAxis("Horizontal");
-		z = Input.GetAxis("Vertical");
-		move = transform.right * x + transform.forward * z;
 
-		Controller.Move(move * MovingSpeed *Time.deltaTime);
 
 		#region MovementSpeedControl
 		if (Sprinting)
