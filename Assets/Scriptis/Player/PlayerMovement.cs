@@ -1,5 +1,4 @@
 ﻿using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
 public class PlayerMovement : MonoBehaviour {
@@ -8,9 +7,8 @@ public class PlayerMovement : MonoBehaviour {
 	public Transform GroundCheck;
 	public Camera cam;
 
-	Vector3 move;
-
-	Vector3 Velocity;
+	Vector3 moveH;
+	Vector3 moveV;
 
 
 	public LayerMask groundMask;
@@ -23,6 +21,9 @@ public class PlayerMovement : MonoBehaviour {
 	public float speed = 20f;
 	public float sprintspeed = 40f;
 	public float walkingspeed = 15f;
+	float accel_start_speed;
+	public float movement_accrate = 1.5f;
+	float movement_accrate_carrier = 1.5f;
 	float speedcarrier;
 	public float gravity = -9.8f;
 	public float mass = 1f;
@@ -30,9 +31,12 @@ public class PlayerMovement : MonoBehaviour {
 	public float max_falling_speed = -1000f;
 	public float groundDistance = 0.5f;
 	public float jumpheight = 3f;
-	public float accrate;
-	float accrate_carrier;
-	float r1 = 1.5f;
+	public float jump_factor = 3f;
+
+
+	public float gravity_factor=0.05f;
+
+
 
 	float x2 = 0;
 	float z2 = 0;
@@ -54,19 +58,21 @@ public class PlayerMovement : MonoBehaviour {
 	void Start()
 	{
 		Cursor.lockState = CursorLockMode.Locked;
+
 		speedcarrier = speed;
-		accrate_carrier = accrate;
-		Velocity.y = gravity;
+		movement_accrate_carrier = movement_accrate;
+
+		moveV.y = gravity;
 	}
 	void Update()
 	{
 		x = Input.GetAxis("Horizontal");
 		z = Input.GetAxis("Vertical");
-		move = transform.right * x + transform.forward * z;
+		moveH = transform.right * x + transform.forward * z;
 
 		//Camera
 		Vector3 direction = new Vector3(x, 0f, z);
-		if (direction.magnitude >= 0.1f)
+		if (direction.magnitude >= 0.1f) // fix player rotation based on movement direction
 		{
 			float taretAngle = Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg + cam.transform.eulerAngles.y;
 			float angle = Mathf.SmoothDampAngle(transform.eulerAngles.y, taretAngle, ref turnSmothVelocity, turnSmotthTime);
@@ -76,9 +82,9 @@ public class PlayerMovement : MonoBehaviour {
 			Controller.Move(movdir.normalized * speed * Time.deltaTime);
 
 		}
-        else
+        else //moving
         {
-			Controller.Move(move * MovingSpeed * Time.deltaTime);
+			Controller.Move(moveH * MovingSpeed * Time.deltaTime);
 		}
 
 
@@ -92,18 +98,18 @@ public class PlayerMovement : MonoBehaviour {
 		#region MovementSpeedControl
 		if (Sprinting)
 		{
-			Accelerate(ref speed, sprintspeed, mass,ref r1);
-			if (speed == sprintspeed) r1 = 1.5f;
+			Accelerate(ref speed, sprintspeed, ref movement_accrate ,mass);
+			if (speed == sprintspeed) movement_accrate = movement_accrate_carrier;
 		}
 		else if (Walking)
 		{
-			Accelerate(ref speed, walkingspeed, mass, ref r1);
-			if (speed == walkingspeed) r1 = 1.5f;
+			Accelerate(ref speed, walkingspeed,ref movement_accrate, mass);
+			if (speed == walkingspeed) movement_accrate = movement_accrate_carrier;
 		}
 		else if (Idle)
 		{
 			speed = speedcarrier;
-			r1 = 1.5f;
+			movement_accrate = movement_accrate_carrier;
 		}
 
 		#endregion
@@ -113,29 +119,31 @@ public class PlayerMovement : MonoBehaviour {
 			speed = speed / 3;
 			StartCoroutine("Landing");
 			Landed = false;
-			Debug.Log("Fell with Speed: "+Velocity.y);
+			Debug.Log("Fell with Speed: "+moveV.y);
 		}
 		if (Slowed)
 		{
 			float rate = 2f;
-			Accelerate(ref speed, speedcarrier, mass, ref rate);
+			Accelerate(ref speed, speedcarrier,  ref rate, mass);
 		}
 
 		//Gravity
 
-		Accelerate(ref Velocity.y, max_falling_speed, mass, ref accrate);
-		Controller.Move(Velocity * Time.deltaTime);
 
-		if (Grounded && Velocity.y<0)
+
+		Controller.Move(moveV * Time.deltaTime);
+		AccelByMass(ref moveV.y, accel_start_speed, max_falling_speed, mass, gravity);
+
+		if (Grounded && moveV.y<0)
 		{
-			accrate = accrate_carrier;
-			Velocity.y = -2f;
+			moveV.y = -2f;
 			Jumping = false;
 		}
 
 		if (Input.GetButtonDown("Jump") && Grounded && !Crouched)
 		{
-			Velocity.y = Mathf.Sqrt(jumpheight * -2 * gravity);
+			moveV.y = Mathf.Sqrt(jumpheight  * -1 * jump_factor * gravity);
+			accel_start_speed = speed;
 			Jumping = true;
 		}
 		else if (Input.GetButtonDown("Jump") && Crouched)
@@ -147,14 +155,13 @@ public class PlayerMovement : MonoBehaviour {
 		//SwitchCursor();
 		if (Input.GetKeyDown(KeyCode.T))
 		{
-			Velocity.y = 10f;
-			accrate = accrate_carrier;
-			Controller.Move(Velocity);
+			moveV.y = 10f;
+			Controller.Move(moveV);
 		}
 
 		if (Input.GetKey(KeyCode.G))
 		{
-			Controller.Move(move*1.5f);
+			Controller.Move(moveH*1.5f);
 		}
 	}
 	
@@ -176,9 +183,11 @@ public class PlayerMovement : MonoBehaviour {
 
 		MovingSpeed = speed;
 
+		max_falling_speed = mass * gravity;
+
 		Grounded = Physics.CheckSphere(GroundCheck.position, groundDistance, groundMask);
 
-		if (Velocity.y<=max_safe_falling_speed && Grounded)
+		if (moveV.y<=max_safe_falling_speed && Grounded)
 		{
 			Landed = true;
 		}
@@ -255,17 +264,55 @@ public class PlayerMovement : MonoBehaviour {
 		Slowed = false;
 		Debug.Log("SpeedBack");
 	}
-	void Accelerate(ref float speed, float max_speed,float mass,ref float accel_rate , float a1=1f)
+	void Accelerate(ref float speed, float target_speed,ref float accel_rate, float mass=1) //Increases the magnitude of speed based on "accel_rate"
 	{
-		if (Mathf.Abs(speed) < Mathf.Abs(max_speed))
+		if (Mathf.Abs(speed) < Mathf.Abs(target_speed))
 		{
-			accel_rate += accel_rate * a1 * Time.deltaTime;
+			accel_rate += accel_rate * Time.deltaTime;
 			speed += (accel_rate * mass * Time.deltaTime);
+			Mathf.SmoothDamp(speed, target_speed,ref accel_rate, 2);
 		}
 		else
 		{
-			speed = max_speed;
+			speed = target_speed;
 		}
 	}
+	void AccelByTime(ref float actual_speed, float test_start_speed, float target_speed, float timer=1)
+	{
+		if (actual_speed == target_speed) return;
+		bool UP;
+		float speed_diff = target_speed - test_start_speed;
+		if (speed_diff > 0) UP = true;
+		else UP = false;
+
+
+		actual_speed +=  (speed_diff * mass * Time.deltaTime)/timer;
+
+		if (UP) { if (actual_speed > target_speed) actual_speed = target_speed; } //if speed exceeded maximum
+		else { if (actual_speed < target_speed) actual_speed = target_speed; } //if speed exceeded minimum
+		Debug.Log("test speed: " + actual_speed);
+
+	}
+	void AccelByMass(ref float actual_speed, float test_start_speed, float target_speed,float mass = 1,float gravity=1)
+	{
+		if (actual_speed == target_speed) return;
+		bool UP;
+		float speed_diff = target_speed - test_start_speed;
+		if (speed_diff > 0) UP = true;
+		else UP = false;
+
+		float increasing = Mathf.Sign(speed_diff) * mass * Mathf.Abs(gravity) * gravity_factor * Time.deltaTime;
+		float most_increasing = gravity * mass * Time.deltaTime;
+		float least_increasing = gravity * Time.deltaTime;
+		//actual_speed += Mathf.Sign(speed_diff) * mass * mass * Mathf.Abs(gravity) * gravity_factor * Time.deltaTime;
+		actual_speed += Mathf.Clamp(increasing, most_increasing, least_increasing);
+
+
+		if (UP) { if (actual_speed > target_speed) actual_speed = target_speed; } //if speed exceeded maximum
+		else { if (actual_speed < target_speed) actual_speed = target_speed; } //if speed exceeded minimum
+		Debug.Log("test speed: " + actual_speed);
+
+	}
+
 
 }
